@@ -1,19 +1,21 @@
-﻿using HostelListingAPI.Contracts;
-using HostelListingAPI.models.Users;
+﻿using HotelListing.API.Core.Contracts;
+using HotelListing.API.Core.models.Users;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace HostelListingAPI.Controllers
+namespace HotelListing.API.Core.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
     public class AccountController : ControllerBase
     {
         private readonly IAuthManager _authManager;
+        private readonly ILogger<AccountController> _logger;
 
-        public AccountController(IAuthManager authManager)
+        public AccountController(IAuthManager authManager, ILogger<AccountController> logger)
         {
             _authManager = authManager;
+            _logger = logger;
         }
 
         // api/Account/register
@@ -24,18 +26,28 @@ namespace HostelListingAPI.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult> Register([FromBody]ApiUserDto apiUserDto)
         {
-            var errors = await _authManager.Register(apiUserDto);
-
-            if(errors.Any())
+            _logger.LogInformation($"Registration Attempt for {apiUserDto.Email}");
+            try
             {
-                foreach (var error in errors)
-                {
-                    ModelState.AddModelError(error.Code, error.Description);
-                }
-                return BadRequest(ModelState);
-            }
+                var errors = await _authManager.Register(apiUserDto);
 
-            return Ok();
+                if (errors.Any())
+                {
+                    foreach (var error in errors)
+                    {
+                        ModelState.AddModelError(error.Code, error.Description);
+                    }
+                    return BadRequest(ModelState);
+                }
+
+                return Ok();
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, $"Something went wong in the {nameof(Register)} - User Registration attempt for {apiUserDto.Email}");
+
+                return Problem($"Something went wrong in the {nameof(Register)}. Please contact support.", statusCode: 500);
+            }
         }
 
         // api/Account/login
@@ -46,15 +58,24 @@ namespace HostelListingAPI.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult> Login([FromBody] LoginDto loginDto)
         {
-            var authResponse = await _authManager.Login(loginDto);
-
-            if(authResponse is null)
+            _logger.LogInformation($"Login Attempt for {loginDto.Email}");
+            try
             {
-                //401 ERROR, FORBIDDEN ERROR IS 403
-                return Unauthorized();
-            }
+                var authResponse = await _authManager.Login(loginDto);
 
-            return Ok(authResponse);
+                if (authResponse is null)
+                {
+                    //401 ERROR, FORBIDDEN ERROR IS 403
+                    return Unauthorized();
+                }
+
+                return Ok(authResponse);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, $"Something went wrong in the {nameof(Login)}");
+                return Problem($"Something went wrong in the {nameof(Login)}", statusCode: 500);
+            }
         }
 
         // api/Account/refreshtoken
